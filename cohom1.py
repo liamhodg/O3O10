@@ -3,6 +3,7 @@ from tqdm import trange, tqdm
 from flint import arb, arb_poly, ctx, arb_mat
 from arb_cheby import pickleable_polys, unpickle_polys, chebyfit
 from arb_roots import brent, broyden
+from scipy.io import savemat
 import sys
 import os
 import pickle
@@ -365,7 +366,7 @@ def alpha_posteriori_error(eta, zeta):
     error += (eta.poly_WXYZ(T_alpha)['Y'] - zeta.poly_WXYZ(T_omega)['Y'])**2
     return error.sqrt()
 
-def generate_solution_O3O10(dps, eps=0.05):
+def generate_solution_O3O10(dps, eps=0.005):
     # Avoid issues with conversion to integer
     sys.set_int_max_str_digits(0)
     print('Generate Solution with Target DPS:', dps)
@@ -382,10 +383,10 @@ def generate_solution_O3O10(dps, eps=0.05):
         T_alpha, T_omega = arb(data['T_alpha']), arb(data['T_omega'])
         eta = Eta(2, 9, alpha_star, 2+9, dps = dps, verbose=True)
         zeta = Eta(9, 2, omega_star, 2+9, dps = dps, verbose=True)
-        eta.eta_p = unpickle_polys(data['eta'], T_alpha)
         eta.eta_pT = T_alpha+eps
-        zeta.eta_p = unpickle_polys(data['zeta'], T_omega)
+        eta.eta_p = unpickle_polys(data['eta'], eta.eta_pT)
         zeta.eta_pT = T_omega+eps
+        zeta.eta_p = unpickle_polys(data['zeta'], zeta.eta_pT)
     else:
         ao = AlphaOmega(2, 9, 2+9, dps = dps, verbose=True)
         x0 = arb_mat([[arb('6.0838654955812261377445980424896688618103246957')], \
@@ -406,3 +407,29 @@ def generate_solution_O3O10(dps, eps=0.05):
                          'zeta':pickleable_polys(zeta.eta_p),
                          'eps':eps}, file)
     return eta, zeta, alpha_star, omega_star, T_alpha, T_omega
+
+def pkl_to_matlab(dps, eps=0.005):
+    """Export pickled data into MATLAB compatible matrix for use with MATLAB
+    scripts."""
+    fname = 'eta_zeta_' + str(dps) + '.pkl'
+    mname = 'matlab/eta_zeta.mat'
+    ctx.dps = int(7.3 * dps) + 16
+    with open(fname, 'rb') as file:
+        data = pickle.load(file)
+    T_alpha, T_omega = arb(data['T_alpha']), arb(data['T_omega'])
+    T_alpha += eps
+    T_omega += eps
+    eta_p = unpickle_polys(data['eta'], T_alpha)
+    eta_p = [fn.integral() for fn in eta_p]
+    zeta_p = unpickle_polys(data['zeta'], T_omega)
+    zeta_p = [fn.integral() for fn in zeta_p]
+    M = len(data['eta'])
+    N_eta = len(data['eta'][0])
+    eta_mat  = np.array([[float(eta_p[idx].coeffs()[idy].mid()) for idy in range(N_eta)] for idx in range(M)])
+    zeta_mat = np.array([[float(zeta_p[idx].coeffs()[idy].mid()) for idy in range(N_eta)] for idx in range(M)])
+    def a2f(x):
+        return float(arb(x).mid())
+    savemat(mname, {'eta_mat':eta_mat, 'zeta_mat':zeta_mat, \
+                    'T_alpha':float(T_alpha), 'T_omega':float(T_omega), 'eps':float(eps)})
+    print('Successfully exported to mat file.')
+    

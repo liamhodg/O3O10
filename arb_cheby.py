@@ -7,7 +7,7 @@ def pickleable_polys(polys):
     poly_out = []
     for poly in polys:
         coeffs = poly.coeffs()
-        coeffs_tuple = [(c.mid().str(dps, radius=False), c.rad().str(5, radius=False)) for c in coeffs]
+        coeffs_tuple = [(c.mid().str(2*dps, radius=False), c.rad().str(5, radius=False)) for c in coeffs]
         poly_out.append(coeffs_tuple)
     return poly_out
 
@@ -18,7 +18,7 @@ def unpickle_polys(polys, T):
         dps = len(poly[0][0])
         if dps > ctx.dps:
             ctx.dps = dps
-        coeffs = [arb(mid=x[0], rad=x[1]) for x in poly]
+        coeffs = [arb(mid=xm, rad=xr) for (xm, xr) in poly]
         poly_out.append(arb_chebyT(coeffs, a=arb('0'), b=T))
     return poly_out
 
