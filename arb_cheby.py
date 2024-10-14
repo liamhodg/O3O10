@@ -222,6 +222,15 @@ class arb_chebyT(arb_poly):
     def __divmod__(self, other):
         raise NotImplementedError('Cannot perform divmod of Chebyshev polynomials')
     
+def chebyroots(a, b, N):
+    """Compute the roots of the N-th degree Chebyshev polynomial"""
+    h = arb('0.5')
+    aN = arb(str(N))
+    gap = (b - a)*h
+    mid = (b + a)*h
+    unif = [(arb(str(k))-h)/aN for k in range(1, N+1)]
+    grid = [x.cos_pi()*gap + mid for x in unif]
+    return grid
 
 def chebyfit(f, a, b, N, verbose=False):
     """Fit a Chebyshev polynomial to a given function f on [a,b] to 
@@ -232,12 +241,6 @@ def chebyfit(f, a, b, N, verbose=False):
     http://mathworld.wolfram.com/ChebyshevApproximationFormula.html
     """
     # Compute Chebyshev grid
-    h = arb('0.5')
-    aN = arb(str(N))
-    gap = (b - a)*h
-    mid = (b + a)*h
-    unif = [(arb(str(k))-h)/aN for k in range(1, N+1)]
-    grid = [x.cos_pi()*gap + mid for x in unif]
     if verbose:
         pbar = tqdm(grid)
     else:
