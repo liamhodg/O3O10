@@ -83,6 +83,26 @@ class Eta(object):
         result[1] = self.polys[idx][1](t_tmp)
         result[2] = self.polys[idx][2](t_tmp)
         return result
+    
+    def p(self, t):
+        """Evaluate the function using the polynomial approximations at
+        a given time."""
+        result = arb_zeros(3)
+        result[0] = self.eta_p[0].integral()(t)
+        result[1] = self.eta_p[1].integral()(t)
+        result[2] = self.eta_p[2].integral()(t)
+        return result
+    
+    def p5(self, t):
+        """Evaluate the augmented function with polynomial approximations
+        at a given time."""
+        result = arb_zeros(5)
+        result[0] = self.eta_p[0].integral()(t)
+        result[1] = self.eta_p[1].integral()(t)
+        result[2] = self.eta_p[2].integral()(t)
+        result[3] = self.alpha
+        result[4] = self.lam**0.5
+        return result
 
     def initial_series(self):
         """Construct the initial power series approximation about zero"""
