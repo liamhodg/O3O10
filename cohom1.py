@@ -21,7 +21,7 @@ class Eta(object):
     """
 
     def __init__(self, d1, d2, alpha, lam, dps=20, rho=0.3, working_dps=None, verbose=False, \
-                pverbose = False):
+                pverbose = False, compute=True):
         # Prepare, then set
         self.dps = dps
         if working_dps is None:
@@ -46,27 +46,28 @@ class Eta(object):
         if self.verbose:
             print('ETA(dps = %d)'%self.dps)
             print('-- Series 1')
-        t_pt, initial_polys = self.initial_series()
-        self.grid = [t_pt]
-        self.polys = [initial_polys]
-        # Compute remaining series
-        if pverbose:
-            pbar = tqdm(range(8))
-        while self.Z(self.grid[-1]) > 0:
-            if self.verbose:
-                print('-- Series', len(self.grid)+1)
-            t, p = self.next_series()
-            self.grid.append(t)
-            self.polys.append(p)
+        if compute:
+            t_pt, initial_polys = self.initial_series()
+            self.grid = [t_pt]
+            self.polys = [initial_polys]
+            # Compute remaining series
             if pverbose:
-                pbar.update(1)
-                pbar.refresh()
-        # Cleanup series (remove error intervals)
-        for idx, poly_arr in enumerate(self.polys):
-            for idy, poly in enumerate(poly_arr):
-                coeffs = poly.coeffs()
-                coeffs = [c.mid() for c in coeffs]
-                self.polys[idx][idy] = arb_poly(coeffs)
+                pbar = tqdm(range(8))
+            while self.Z(self.grid[-1]) > 0:
+                if self.verbose:
+                    print('-- Series', len(self.grid)+1)
+                t, p = self.next_series()
+                self.grid.append(t)
+                self.polys.append(p)
+                if pverbose:
+                    pbar.update(1)
+                    pbar.refresh()
+            # Cleanup series (remove error intervals)
+            for idx, poly_arr in enumerate(self.polys):
+                for idy, poly in enumerate(poly_arr):
+                    coeffs = poly.coeffs()
+                    coeffs = [c.mid() for c in coeffs]
+                    self.polys[idx][idy] = arb_poly(coeffs)
 
 
     def __call__(self, t):
@@ -91,6 +92,15 @@ class Eta(object):
         result[0] = self.eta_p[0].integral()(t)
         result[1] = self.eta_p[1].integral()(t)
         result[2] = self.eta_p[2].integral()(t)
+        return result
+    
+    def p_deriv(self, t):
+        """Evaluate the function derivative using the polynomial approximations at
+        a given time."""
+        result = arb_zeros(3)
+        result[0] = self.eta_p[0](t)
+        result[1] = self.eta_p[1](t)
+        result[2] = self.eta_p[2](t)
         return result
     
     def p5(self, t):
@@ -166,12 +176,13 @@ class Eta(object):
         return (t_pt+0.5*self.radius).mid(), \
                 [arb_poly([coeffs[idx][idy] for idx in range(N+1)]) for idy in range(3)]
 
-    def cheby(self, eps=0.05):
+    def cheby(self, eps, T = None):
         """Return the Chebyshev polynomial approximations for eta_1, eta_2, eta_3,
         on [0,T+eps] requiring that all three are zero at t = 0."""
         N = int(3 * self.dps) + 1
         ctx.dps = N + 10
-        T = self.mean_curv_root().mid() + eps
+        if T is None:
+            T = self.mean_curv_root().mid() + eps
         if self.verbose:
             print('-- Compute Chebyshev 1')
         eta_p1 = chebyfit(lambda t: self.deriv(t)[0], arb('0'), T, N, verbose=self.verbose)
@@ -282,13 +293,19 @@ class Eta(object):
         hk_eta_1 = 0
         hk_eta_2 = 0
         hk_eta_3 = 0
-        for l in range(k+1):
-            hk_eta_1 += (eta_1*eta_1).integral().evaluate([T_a])[0].sqrt()
-            hk_eta_2 += (eta_2*eta_2).integral().evaluate([T_a])[0].sqrt()
-            hk_eta_3 += (eta_3*eta_3).integral().evaluate([T_a])[0].sqrt()
+        for l in range(k):
+            hk_eta_1 += (eta_1*eta_1).integral().evaluate([T_a])[0]#.sqrt()
+            hk_eta_2 += (eta_2*eta_2).integral().evaluate([T_a])[0]#.sqrt()
+            hk_eta_3 += (eta_3*eta_3).integral().evaluate([T_a])[0]#.sqrt()
             eta_1 = eta_1.derivative()
             eta_2 = eta_2.derivative()
             eta_3 = eta_3.derivative()
+        hk_eta_1 += (eta_1*eta_1).integral().evaluate([T_a])[0]#.sqrt()
+        hk_eta_2 += (eta_2*eta_2).integral().evaluate([T_a])[0]#.sqrt()
+        hk_eta_3 += (eta_3*eta_3).integral().evaluate([T_a])[0]#.sqrt()
+        hk_eta_1 = hk_eta_1.sqrt()
+        hk_eta_2 = hk_eta_2.sqrt()
+        hk_eta_3 = hk_eta_3.sqrt()
         if upper:
             hk_eta_1 = round(float((hk_eta_1 + arb(mid=0, rad=0.005)).upper()), ndigits=2)
             hk_eta_2 = round(float((hk_eta_2 + arb(mid=0, rad=0.005)).upper()), ndigits=2)
@@ -323,9 +340,9 @@ class Eta(object):
         hk_err_2 = 0
         hk_err_3 = 0
         for l in range(k+1):
-            hk_err_1 += (E_1*E_1).integral().evaluate([T_a])[0].sqrt()
-            hk_err_2 += (E_2*E_2).integral().evaluate([T_a])[0].sqrt()
-            hk_err_3 += (E_3*E_3).integral().evaluate([T_a])[0].sqrt()
+            hk_err_1 += (E_1*E_1).integral().evaluate([T_a])[0]#.sqrt()
+            hk_err_2 += (E_2*E_2).integral().evaluate([T_a])[0]#.sqrt()
+            hk_err_3 += (E_3*E_3).integral().evaluate([T_a])[0]#.sqrt()
             E_1 = E_1.derivative()
             E_2 = E_2.derivative()
             E_3 = E_3.derivative()
@@ -334,7 +351,7 @@ class Eta(object):
             hk_eta_2 = (hk_eta_2 + arb(mid=0, rad=0.005)).upper()
             hk_eta_3 = (hk_eta_3 + arb(mid=0, rad=0.005)).upper()
         err = hk_err_1 + hk_err_2 + hk_err_3
-        return err
+        return err.sqrt()
 
 class AlphaOmega(object):
     """Computing the function $A(t): R -> R^2$ to arbitrary precision using heuristics."""
@@ -356,11 +373,13 @@ class AlphaOmega(object):
 
     def __call__(self, alpha, forward=True):
         if forward:
-            eta = Eta(self.d1, self.d2, alpha, self.lam, dps=self.dps+5, pverbose=self.verbose)
+            eta = Eta(self.d1, self.d2, alpha, self.lam, \
+                      dps=self.dps, working_dps=self.working_dps, pverbose=self.verbose)
             stop_time_eta = eta.mean_curv_root()
             return eta.W(stop_time_eta), eta.Y(stop_time_eta)
         else:
-            zeta = Eta(self.d2, self.d1, alpha, self.lam, dps=self.dps+5, pverbose=self.verbose)
+            zeta = Eta(self.d2, self.d1, alpha, self.lam, \
+                       dps=self.dps, working_dps=self.working_dps, pverbose=self.verbose)
             stop_time_zeta = zeta.mean_curv_root()
             return zeta.X(stop_time_zeta), zeta.Y(stop_time_zeta)
         
@@ -386,28 +405,13 @@ def alpha_posteriori_error(eta, zeta):
     error += (eta.poly_WXYZ(T_alpha)['Y'] - zeta.poly_WXYZ(T_omega)['Y'])**2
     return error.sqrt()
 
-def generate_solution_O3O10(dps, eps=0.005):
+def generate_solution_O3O10(dps, eps=0.001):
     # Avoid issues with conversion to integer
     sys.set_int_max_str_digits(0)
     print('Generate Solution with Target DPS:', dps)
     print('----------------------------------------')
-    fname = 'eta_zeta_'+str(dps)+'.pkl'
-    if os.path.isfile(fname):
-        ctx.dps = int(7.3 * dps) + 16
-        with open(fname, 'rb') as file:
-            data = pickle.load(file)
-            print('- Load complete')
-        if data['eps'] != eps:
-            raise Exception('Epsilon mismatch, must be recomputed')
-        alpha_star, omega_star = arb(data['alpha_star']), arb(data['omega_star'])
-        T_alpha, T_omega = arb(data['T_alpha']), arb(data['T_omega'])
-        eta = Eta(2, 9, alpha_star, 2+9, dps = dps, verbose=True)
-        zeta = Eta(9, 2, omega_star, 2+9, dps = dps, verbose=True)
-        eta.eta_pT = T_alpha+eps
-        eta.eta_p = unpickle_polys(data['eta'], eta.eta_pT)
-        zeta.eta_pT = T_omega+eps
-        zeta.eta_p = unpickle_polys(data['zeta'], zeta.eta_pT)
-    else:
+    fname = 'data/eta_zeta_'+str(dps)+'.pkl'
+    if not os.path.isfile(fname):
         ao = AlphaOmega(2, 9, 2+9, dps = dps, verbose=True)
         x0 = arb_mat([[arb('6.0838654955812261377445980424896688618103246957')], \
               [arb('6.1859148331798468647277049839762331689687761753054233564769')]])
@@ -419,19 +423,41 @@ def generate_solution_O3O10(dps, eps=0.005):
         T_omega = zeta.mean_curv_root()
         zeta.cheby(eps=eps)
         
-        with open('eta_zeta_'+str(dps)+'.pkl','wb') as file:
+        with open(fname,'wb') as file:
             pickle.dump({'alpha_star':alpha_star.str(radius=False),
                          'omega_star':omega_star.str(radius=False),
                          'T_alpha':T_alpha.str(),'T_omega':T_omega.str(),
                          'eta':pickleable_polys(eta.eta_p),
                          'zeta':pickleable_polys(zeta.eta_p),
+                         'eta_orig':[pickleable_polys(x) for x in eta.polys],
+                         'zeta_orig':[pickleable_polys(x) for x in zeta.polys],
+                         'eta_grid':[x.str(radius=False) for x in eta.grid],
+                         'zeta_grid':[x.str(radius=False) for x in zeta.grid],
                          'eps':eps}, file)
+    ctx.dps = int(7.3 * dps) + 16
+    with open(fname, 'rb') as file:
+        data = pickle.load(file)
+        print('- Load complete')
+    if data['eps'] != eps:
+        raise Exception('Epsilon mismatch, must be recomputed')
+    alpha_star, omega_star = arb(data['alpha_star']), arb(data['omega_star'])
+    T_alpha, T_omega = arb(data['T_alpha']), arb(data['T_omega'])
+    eta = Eta(2, 9, alpha_star, 2+9, dps = dps, verbose=True, compute=False)
+    zeta = Eta(9, 2, omega_star, 2+9, dps = dps, verbose=True, compute=False)
+    eta.grid = [arb(x) for x in data['eta_grid']]
+    zeta.grid = [arb(x) for x in data['zeta_grid']]
+    eta.polys = [unpickle_polys(x) for x in data['eta_orig']]
+    zeta.polys = [unpickle_polys(x) for x in data['zeta_orig']]
+    eta.eta_pT = T_alpha+eps
+    eta.eta_p = unpickle_polys(data['eta'], eta.eta_pT)
+    zeta.eta_pT = T_omega+eps
+    zeta.eta_p = unpickle_polys(data['zeta'], zeta.eta_pT)
     return eta, zeta, alpha_star, omega_star, T_alpha, T_omega
 
 def pkl_to_matlab(dps, eps=0.005):
     """Export pickled data into MATLAB compatible matrix for use with MATLAB
     scripts."""
-    fname = 'eta_zeta_' + str(dps) + '.pkl'
+    fname = 'data/eta_zeta_' + str(dps) + '.pkl'
     mname = 'matlab/eta_zeta.mat'
     ctx.dps = int(7.3 * dps) + 16
     with open(fname, 'rb') as file:

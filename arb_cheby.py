@@ -11,7 +11,7 @@ def pickleable_polys(polys):
         poly_out.append(coeffs_tuple)
     return poly_out
 
-def unpickle_polys(polys, T):
+def unpickle_polys(polys, T=None):
     """Convert pickled versions of arb_chebyT into the original arb polynomials."""
     poly_out = []
     for poly in polys:
@@ -19,7 +19,10 @@ def unpickle_polys(polys, T):
         if dps > ctx.dps:
             ctx.dps = dps
         coeffs = [arb(mid=xm, rad=xr) for (xm, xr) in poly]
-        poly_out.append(arb_chebyT(coeffs, a=arb('0'), b=T))
+        if T is None:
+            poly_out.append(arb_poly(coeffs))
+        else:
+            poly_out.append(arb_chebyT(coeffs, a=arb('0'), b=T))
     return poly_out
 
 class arb_chebyT(arb_poly):
@@ -32,6 +35,7 @@ class arb_chebyT(arb_poly):
         self.b = arb(b)
         self.monomials = None
         self.cesamials = None
+        self.sub_poly = acb_poly(self.coeffs())
 
     def __call__(self, t):
         if isinstance(t, arb):
@@ -63,14 +67,13 @@ class arb_chebyT(arb_poly):
         return arb_chebyT(new_coeffs, a=self.a, b=self.b) * scale
     
     def evaluate(self, xs, algorithm='fast'):
-        sub_poly = acb_poly(self.coeffs())
         scale = arb('2')/(self.b-self.a)
         end_pt = arb('-1')*(self.b+self.a)/(self.b-self.a)
         xs_c = [acb(scale*x +end_pt) for x in xs]
         x1 = [x - (x*x - 1).sqrt() for x in xs_c]
         x2 = [x + (x*x - 1).sqrt() for x in xs_c]
-        y1 = sub_poly.evaluate(x1, algorithm=algorithm)
-        y2 = sub_poly.evaluate(x2, algorithm=algorithm)
+        y1 = self.sub_poly.evaluate(x1, algorithm=algorithm)
+        y2 = self.sub_poly.evaluate(x2, algorithm=algorithm)
         out = []
         for idx, x in enumerate(xs):
             u = (y1[idx] + y2[idx])/arb('2')
@@ -178,7 +181,7 @@ class arb_chebyT(arb_poly):
         return str(self)
     
     def __neg__(self):
-        return arb_chebyT(super().__neg__().coeffs())
+        return arb_chebyT(super().__neg__().coeffs(), a=self.a, b=self.b)
 
     def __add__(self, other):
         if isinstance(other, arb_chebyT):
@@ -241,6 +244,9 @@ def chebyfit(f, a, b, N, verbose=False):
     http://mathworld.wolfram.com/ChebyshevApproximationFormula.html
     """
     # Compute Chebyshev grid
+    grid = chebyroots(a, b, N)
+    h = arb('0.5')
+    aN = arb(str(N))
     if verbose:
         pbar = tqdm(grid)
     else:

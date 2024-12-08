@@ -1,2 +1,7 @@
 __pycache__
-playground.ipynb
+playground*
+test.dat
+train.dat
+loss.dat
+cohom1_nn.py
+cohom1_nn_broken.py
